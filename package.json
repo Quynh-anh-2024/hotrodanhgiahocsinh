@@ -12,7 +12,10 @@
     "xlsx": "^0.18.5",
     "@google/genai": "^1.35.0",
     "react-dom": "^19.2.3",
-    "react": "^19.2.3"
+    "react": "^19.2.3",
+    "vite": "^7.3.1",
+    "@vitejs/plugin-react": "^5.1.2",
+    "vite-plugin-pwa": "^1.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
