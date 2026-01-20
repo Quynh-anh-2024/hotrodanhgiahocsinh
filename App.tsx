@@ -7,12 +7,13 @@ import { StudentRecord, AchievementLevel, GenerationConfig, Grade, SUBJECT_MAP, 
 import { generateComments } from './services/geminiService';
 import * as XLSX from 'xlsx';
 
-const GRADE_COLORS: Record<Grade, string> = {
-  '1': 'bg-rose-500',
-  '2': 'bg-sky-500',
-  '3': 'bg-emerald-500',
-  '4': 'bg-amber-500',
-  '5': 'bg-violet-500'
+// New Color Scheme Map
+const GRADE_CONFIG: Record<Grade, { bg: string, text: string, ring: string, activeBg: string }> = {
+  '1': { bg: 'bg-emerald-100', text: 'text-emerald-600', ring: 'ring-emerald-400', activeBg: 'bg-emerald-500' }, // Green
+  '2': { bg: 'bg-amber-100', text: 'text-amber-600', ring: 'ring-amber-400', activeBg: 'bg-amber-500' },     // Yellow
+  '3': { bg: 'bg-orange-100', text: 'text-orange-600', ring: 'ring-orange-400', activeBg: 'bg-orange-500' },   // Orange
+  '4': { bg: 'bg-sky-100', text: 'text-sky-600', ring: 'ring-sky-400', activeBg: 'bg-sky-500' },         // Blue
+  '5': { bg: 'bg-purple-100', text: 'text-purple-600', ring: 'ring-purple-400', activeBg: 'bg-purple-500' }    // Purple
 };
 
 const TERMS: Term[] = ['Giữa học kỳ 1', 'Cuối học kỳ 1', 'Giữa học kỳ 2', 'Cuối học kỳ 2'];
@@ -22,7 +23,6 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
-  // Kiểm tra khóa API ngay lập tức
   const [isConfigOpen, setIsConfigOpen] = useState(() => {
     const savedKey = localStorage.getItem('user_api_key');
     return !savedKey && !process.env.API_KEY;
@@ -187,40 +187,42 @@ const App: React.FC = () => {
     XLSX.writeFile(workbook, `NhanXet_Lop${config.grade}_${config.term}.xlsx`);
   };
 
-  const currentThemeColor = GRADE_COLORS[config.grade];
-
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0f9fa] text-slate-900 font-sans selection:bg-cyan-100">
+    <div className="min-h-screen flex flex-col bg-[#e6fcf5] text-slate-800 font-sans selection:bg-[#20c997] selection:text-white">
       <Header onOpenConfig={() => setIsConfigOpen(true)} />
       
-      <main className="flex-grow max-w-7xl mx-auto px-4 py-8 w-full">
+      <main className="flex-grow max-w-[1400px] mx-auto px-6 py-10 w-full">
         {errorMessage && (
-          <div className="mb-6 bg-white border-l-4 border-red-500 p-5 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-4">
+          <div className="mb-8 bg-white border-l-4 border-red-500 p-6 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-4">
             <p className="text-xs font-black text-red-500 uppercase mb-1 tracking-widest">Lỗi hệ thống</p>
             <p className="text-sm text-slate-600 font-medium">{errorMessage}</p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-4 space-y-8">
-            <section className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-cyan-900/5 border border-white">
-              <h2 className={`text-[10px] font-black uppercase tracking-[0.3em] mb-8 flex items-center ${currentThemeColor.replace('bg-', 'text-')}`}>
-                <span className={`w-3 h-3 rounded-full mr-3 shadow-inner ${currentThemeColor}`}></span>
+        {/* Lock Interface with Blur if No API Key */}
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-10 transition-all duration-500 ${isConfigOpen && !localStorage.getItem('user_api_key') ? 'blur-sm grayscale opacity-50 pointer-events-none' : ''}`}>
+          
+          {/* SIDEBAR CONFIGURATION */}
+          <div className="lg:col-span-4 space-y-6">
+            <section className="bg-white p-8 rounded-[24px] shadow-lg shadow-[#20c997]/5 border border-white">
+              <h2 className="text-sm font-extrabold text-[#20c997] uppercase tracking-widest mb-8 flex items-center">
+                <span className="w-2 h-2 rounded-full bg-[#20c997] mr-3"></span>
                 Thiết lập đánh giá
               </h2>
               
               <div className="space-y-8">
+                {/* 1. Grade Selector - Circles */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-300 uppercase mb-4 block tracking-widest">Khối lớp</label>
-                  <div className="grid grid-cols-5 gap-2.5">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Khối lớp</label>
+                  <div className="flex justify-between gap-2">
                     {(['1', '2', '3', '4', '5'] as Grade[]).map(g => (
                       <button
                         key={g}
                         onClick={() => setConfig(prev => ({ ...prev, grade: g }))}
-                        className={`py-4 rounded-[1.25rem] text-sm font-black transition-all transform active:scale-90 border-2 ${
+                        className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold transition-all shadow-sm ${
                           config.grade === g 
-                          ? `${GRADE_COLORS[g]} border-transparent text-white shadow-xl shadow-${GRADE_COLORS[g].replace('bg-', '')}/20` 
-                          : 'bg-slate-50 border-transparent text-slate-400 hover:bg-cyan-50 hover:text-cyan-600'
+                          ? `${GRADE_CONFIG[g].activeBg} text-white shadow-lg scale-110 ring-4 ring-offset-2 ${GRADE_CONFIG[g].ring}` 
+                          : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
                         }`}
                       >
                         {g}
@@ -229,17 +231,18 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
+                {/* 2. Term Selector */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-300 uppercase mb-4 block tracking-widest">Thời điểm đánh giá</label>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Thời điểm</label>
+                  <div className="grid grid-cols-2 gap-3">
                     {TERMS.map(t => (
                       <button
                         key={t}
                         onClick={() => setConfig(prev => ({ ...prev, term: t }))}
-                        className={`py-3 px-2 rounded-xl text-[10px] font-black transition-all border-2 uppercase tracking-tighter ${
+                        className={`py-3 px-2 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
                           config.term === t 
-                          ? 'bg-cyan-600 border-transparent text-white shadow-lg' 
-                          : 'bg-slate-50 border-transparent text-slate-400 hover:bg-cyan-50 hover:text-cyan-600'
+                          ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30' 
+                          : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
                         }`}
                       >
                         {t}
@@ -248,159 +251,180 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
+                {/* 3. Subject Selector */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-300 uppercase mb-4 block tracking-widest">Môn học</label>
-                  <div className="relative group">
+                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Môn học</label>
+                  <div className="relative">
                     <select 
                       value={config.subjectContext}
                       onChange={(e) => setConfig({...config, subjectContext: e.target.value})}
-                      className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:bg-white focus:border-cyan-400 appearance-none cursor-pointer shadow-inner transition-all"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:bg-white focus:border-[#20c997] focus:ring-2 focus:ring-[#20c997]/20 appearance-none cursor-pointer transition-all"
                     >
                       {SUBJECT_MAP[config.grade].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>
+                    <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"/></svg>
                     </div>
                   </div>
                 </div>
 
+                {/* 4. Evaluation Basis Selector */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-300 uppercase mb-4 block tracking-widest">Hình thức nhận xét</label>
-                  <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                    <button 
-                      onClick={() => setConfig({...config, evaluationBasis: 'score'})}
-                      className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${config.evaluationBasis === 'score' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Căn cứ đánh giá</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => setConfig({ ...config, evaluationBasis: 'score' })}
+                      className={`py-3 px-1 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
+                        config.evaluationBasis === 'score'
+                        ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30'
+                        : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
+                      }`}
                     >
                       Điểm số
                     </button>
-                    <button 
-                      onClick={() => setConfig({...config, evaluationBasis: 'level'})}
-                      className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${config.evaluationBasis === 'level' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    <button
+                      onClick={() => setConfig({ ...config, evaluationBasis: 'level' })}
+                      className={`py-3 px-1 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
+                        config.evaluationBasis === 'level'
+                        ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30'
+                        : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
+                      }`}
                     >
                       Mức đạt
                     </button>
-                    <button 
-                      onClick={() => setConfig({...config, evaluationBasis: 'both'})}
-                      className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${config.evaluationBasis === 'both' ? 'bg-white text-cyan-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    <button
+                      onClick={() => setConfig({ ...config, evaluationBasis: 'both' })}
+                      className={`py-3 px-1 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
+                        config.evaluationBasis === 'both'
+                        ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30'
+                        : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
+                      }`}
                     >
                       Cả hai
                     </button>
                   </div>
                 </div>
+
+                {/* 5. Upload Dropzone (Replaces Button) */}
+                <div>
+                    <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Dữ liệu nguồn</label>
+                    <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`border-2 border-dashed rounded-[24px] p-8 flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                            records.length > 0 
+                            ? 'border-[#20c997] bg-[#20c997]/5' 
+                            : 'border-slate-200 bg-slate-50 hover:border-[#20c997]/50 hover:bg-white'
+                        }`}
+                    >
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-sm transition-transform group-hover:scale-110 ${records.length > 0 ? 'bg-[#20c997] text-white' : 'bg-white text-[#20c997]'}`}>
+                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </div>
+                        <p className={`text-xs font-bold text-center ${records.length > 0 ? 'text-[#20c997]' : 'text-slate-500 group-hover:text-[#20c997]'}`}>
+                            {records.length > 0 ? `Đã tải ${records.length} học sinh` : 'Chạm để tải file Excel'}
+                        </p>
+                        {records.length === 0 && (
+                            <p className="text-[10px] text-slate-400 mt-2 text-center max-w-[200px] leading-tight">
+                                (File dữ liệu đã nhập điểm số hoặc mức đạt được trên CSDL)
+                            </p>
+                        )}
+                        <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
+                    </div>
+                </div>
               </div>
 
-              <div className="mt-10 space-y-4">
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`w-full py-8 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center transition-all group ${
-                    records.length > 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-slate-50/50 border-slate-100 hover:border-cyan-200 hover:bg-white'
-                  }`}
-                >
-                  <div className={`p-4 rounded-full mb-3 shadow-sm transition-transform group-hover:scale-110 ${records.length > 0 ? 'bg-white text-emerald-500' : 'bg-white text-slate-200 group-hover:text-cyan-500'}`}>
-                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                  </div>
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${records.length > 0 ? `Đã nạp ${records.length} hồ sơ` : 'Tải danh sách Excel'}`}>
-                    {records.length > 0 ? `Đã nạp ${records.length} hồ sơ` : 'Tải danh sách Excel'}
-                  </span>
-                </button>
-                <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
-
+              {/* Generate Button - Gradient Orange */}
+              <div className="mt-10">
                 <button
                   disabled={records.length === 0 || isProcessing}
                   onClick={handleGenerate}
-                  className={`w-full py-6 rounded-3xl font-black text-xs uppercase tracking-[0.25em] transition-all transform active:scale-95 shadow-2xl ${
+                  className={`w-full py-5 rounded-[20px] font-extrabold text-sm uppercase tracking-widest transition-all transform active:scale-95 shadow-xl ${
                     records.length === 0 || isProcessing 
                     ? 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none' 
-                    : `${currentThemeColor} text-white hover:brightness-105 shadow-cyan-900/10`
+                    : 'bg-gradient-to-r from-[#ffc107] to-[#fd7e14] text-white hover:shadow-orange-200 hover:-translate-y-1'
                   }`}
                 >
-                  {isProcessing ? 'AI đang phân tích chương trình...' : 'Bắt đầu tạo nhận xét'}
+                  {isProcessing ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Đang xử lý...
+                    </span>
+                  ) : 'Bắt đầu tạo nhận xét'}
                 </button>
               </div>
             </section>
           </div>
 
+          {/* MAIN CONTENT AREA */}
           <div className="lg:col-span-8">
             {records.length > 0 ? (
-              <div className="bg-white rounded-[3rem] shadow-2xl shadow-cyan-900/5 border border-white overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
-                <div className="px-10 py-8 bg-slate-50/50 border-b border-slate-50 flex justify-between items-center">
-                  <div className="flex flex-col">
-                    <div className="flex items-center space-x-3 mb-1">
-                      <span className={`px-3 py-0.5 rounded-full text-[8px] font-black text-white uppercase tracking-widest ${currentThemeColor}`}>
-                        LỚP {config.grade}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        {config.term}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{config.subjectContext}</h3>
+              <div className="bg-white rounded-[24px] shadow-xl shadow-[#20c997]/5 border border-slate-100 overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
+                <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                  <div>
+                     <h3 className="text-lg font-bold text-slate-800">{config.subjectContext}</h3>
+                     <div className="flex gap-2 mt-1">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${GRADE_CONFIG[config.grade].bg} ${GRADE_CONFIG[config.grade].text}`}>Lớp {config.grade}</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-slate-100 text-slate-500">{config.term}</span>
+                     </div>
                   </div>
                   <button 
                     onClick={exportToExcel} 
-                    className="px-6 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 shadow-xl active:scale-95 flex items-center transition-all"
+                    className="px-6 py-3 bg-[#20c997] text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#19b386] shadow-lg shadow-[#20c997]/20 active:scale-95 flex items-center gap-2 transition-all"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Tải về Excel
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Xuất Excel
                   </button>
                 </div>
                 
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] border-b border-slate-50">
-                        <th className="px-10 py-6 text-left">Học sinh</th>
-                        <th className="px-4 py-6 text-center">Kết quả</th>
-                        <th className="px-10 py-6 text-left">Nội dung nhận xét AI</th>
+                      <tr className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                        <th className="px-8 py-5 text-left bg-slate-50/50">Học sinh</th>
+                        <th className="px-4 py-5 text-center bg-slate-50/50">Kết quả</th>
+                        <th className="px-8 py-5 text-left bg-slate-50/50">Nội dung nhận xét AI</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {records.map(r => (
-                        <tr key={r.id} className="hover:bg-cyan-50/20 transition-colors group">
-                          <td className="px-10 py-8">
-                            <div className="text-sm font-black text-slate-800 tracking-tight group-hover:text-cyan-700 transition-colors">{r.name}</div>
+                        <tr key={r.id} className="hover:bg-slate-50/80 transition-colors group">
+                          <td className="px-8 py-6 align-top">
+                            <div className="text-sm font-bold text-slate-700 group-hover:text-[#20c997] transition-colors">{r.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-1">{r.id.split('-')[1]}</div>
                           </td>
-                          <td className="px-4 py-8 text-center">
-                            <div className="inline-flex flex-col items-center">
-                              <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black shadow-sm mb-1.5 ${
-                                r.level === AchievementLevel.T ? 'bg-green-50 text-green-600' :
-                                r.level === AchievementLevel.H ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'
-                              }`}>
-                                {r.level === AchievementLevel.T ? 'TỐT' : r.level === AchievementLevel.H ? 'ĐẠT' : 'CHƯA ĐẠT'}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-black tabular-nums">{r.score}đ</span>
-                            </div>
+                          <td className="px-4 py-6 text-center align-top">
+                             <div className="flex flex-col items-center gap-1">
+                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                                    r.level === AchievementLevel.T ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                    r.level === AchievementLevel.H ? 'bg-sky-50 text-sky-600 border-sky-100' : 'bg-rose-50 text-rose-600 border-rose-100'
+                                }`}>
+                                    {r.level === AchievementLevel.T ? 'T' : r.level === AchievementLevel.H ? 'H' : 'C'}
+                                </span>
+                                <span className="text-xs font-bold text-slate-500">{r.score}</span>
+                             </div>
                           </td>
-                          <td className="px-10 py-8 min-w-[300px]">
+                          <td className="px-8 py-6 min-w-[350px]">
                             {r.status === 'processing' ? (
-                              <div className="flex flex-col space-y-3 py-2">
-                                <div className="h-1.5 bg-slate-100 animate-pulse rounded-full w-full"></div>
-                                <div className="h-1.5 bg-slate-100 animate-pulse rounded-full w-4/5"></div>
-                                <div className="h-1.5 bg-slate-100 animate-pulse rounded-full w-2/3"></div>
+                              <div className="space-y-2 py-1 max-w-sm">
+                                <div className="h-2 bg-slate-100 rounded w-full animate-pulse"></div>
+                                <div className="h-2 bg-slate-100 rounded w-3/4 animate-pulse"></div>
                               </div>
                             ) : (
-                              <div className="relative group/comment">
+                              <div className="relative group/edit">
                                 <textarea 
                                   value={r.comment || ""}
                                   onChange={(e) => setRecords(prev => prev.map(p => p.id === r.id ? {...p, comment: e.target.value, status: 'completed'} : p))}
-                                  className={`w-full text-[11px] p-5 pr-12 rounded-3xl border-2 bg-slate-50/30 transition-all focus:outline-none focus:bg-white focus:ring-4 focus:ring-cyan-50 italic leading-relaxed resize-none border-transparent hover:border-slate-100 focus:border-cyan-400`}
+                                  className="w-full text-sm text-slate-600 bg-transparent border-2 border-transparent hover:border-slate-100 focus:border-[#20c997] focus:bg-white rounded-xl p-3 transition-all outline-none resize-none leading-relaxed"
                                   rows={3}
-                                  placeholder="..."
                                 />
-                                {r.comment && r.comment.length > 5 && (
-                                  <button 
+                                <button 
                                     onClick={() => handleCopy(r.comment || '', r.id)}
-                                    className={`absolute right-4 top-4 p-2.5 rounded-xl transition-all shadow-sm z-10 ${
-                                      copyStatus === r.id ? 'bg-emerald-500 text-white scale-110' : 'bg-white/90 text-slate-400 hover:text-cyan-600 opacity-0 group-hover/comment:opacity-100 border border-slate-100 hover:scale-105'
-                                    }`}
-                                    title="Sao chép lời nhận xét này"
-                                  >
-                                    {copyStatus === r.id ? (
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                                    ) : (
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
-                                    )}
-                                  </button>
-                                )}
+                                    className={`absolute top-2 right-2 p-1.5 rounded-lg transition-all ${copyStatus === r.id ? 'bg-emerald-500 text-white' : 'text-slate-300 hover:text-[#20c997] hover:bg-slate-50 opacity-0 group-hover/edit:opacity-100'}`}
+                                >
+                                    {copyStatus === r.id ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg> : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>}
+                                </button>
                               </div>
                             )}
                           </td>
@@ -411,20 +435,22 @@ const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-[4rem] border-4 border-dashed border-cyan-50 py-40 flex flex-col items-center justify-center text-center px-16 shadow-inner animate-in fade-in duration-700">
-                <div className="w-28 h-28 rounded-full flex items-center justify-center mb-10 shadow-2xl bg-gradient-to-tr from-cyan-50 to-white">
-                   <svg className="w-12 h-12 text-cyan-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              /* EMPTY STATE - Glassmorphism */
+              <div className="h-full min-h-[500px] flex flex-col items-center justify-center text-center p-12 glass rounded-[32px]">
+                <div className="w-32 h-32 mb-8 bg-white rounded-full flex items-center justify-center shadow-2xl shadow-[#20c997]/10 animate-in zoom-in duration-700">
+                    <svg className="w-16 h-16 text-[#20c997]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
                 </div>
-                <h3 className="text-2xl font-black text-slate-800 uppercase tracking-[0.1em] mb-6">Hệ thống nhận xét Thông tư 27</h3>
-                <p className="text-[11px] text-slate-400 font-bold max-w-sm leading-relaxed uppercase tracking-widest mb-10">
-                  Tải lên tệp Excel chứa tên, điểm số và mức đạt được để AI soạn thảo lời nhận xét chuẩn 2018 cho bạn.
+                <h3 className="text-2xl font-extrabold text-slate-800 mb-4">Sẵn sàng làm việc</h3>
+                <p className="text-slate-500 max-w-md mx-auto leading-relaxed text-sm font-medium">
+                  Vui lòng tải lên tệp Excel và chọn cấu hình ở cột bên trái để bắt đầu tạo nhận xét tự động.
                 </p>
-                <button 
-                   onClick={() => fileInputRef.current?.click()}
-                   className={`px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest text-white shadow-2xl active:scale-95 transition-all ${currentThemeColor}`}
-                >
-                  Chọn tệp Excel ngay
-                </button>
+                <div className="mt-8 flex gap-2">
+                    <div className="w-2 h-2 rounded-full bg-[#20c997] animate-bounce"></div>
+                    <div className="w-2 h-2 rounded-full bg-[#20c997] animate-bounce delay-100"></div>
+                    <div className="w-2 h-2 rounded-full bg-[#20c997] animate-bounce delay-200"></div>
+                </div>
               </div>
             )}
           </div>
