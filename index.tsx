@@ -2,19 +2,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { registerSW } from 'virtual:pwa-register';
 
-// Register Service Worker for PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then((registration) => {
-        console.log('SW registered: ', registration);
-      })
-      .catch((registrationError) => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
-}
+// Tự động đăng ký SW và xử lý cập nhật
+const updateSW = registerSW({
+  onNeedRefresh() {
+    // Tùy chọn: Hiển thị thông báo cho người dùng reload
+    // Hiện tại để autoUpdate nên thường SW sẽ tự claim clients
+    console.log('Phát hiện nội dung mới, ứng dụng đã sẵn sàng để cập nhật.');
+  },
+  onOfflineReady() {
+    console.log('Ứng dụng đã sẵn sàng hoạt động offline.');
+  },
+});
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
