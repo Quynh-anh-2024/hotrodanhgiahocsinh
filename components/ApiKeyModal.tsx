@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { validateApiKey } from '../services/geminiService';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -10,6 +11,8 @@ interface ApiKeyModalProps {
 const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) => {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const isKeySaved = !!localStorage.getItem('user_api_key');
 
   useEffect(() => {
@@ -19,12 +22,20 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
-    if (apiKey.trim()) {
-      localStorage.setItem('user_api_key', apiKey.trim());
-      onSave(apiKey.trim());
-      onClose();
+  const handleSave = async () => {
+    const key = apiKey.trim();
+    if (!key || checking) return;
+    setChecking(true);
+    setCheckMessage(null);
+    const result = await validateApiKey(key);
+    setChecking(false);
+    if (!result.ok) {
+      setCheckMessage(result.message);
+      return;
     }
+    localStorage.setItem('user_api_key', key);
+    onSave(key);
+    onClose();
   };
 
   return (
@@ -86,7 +97,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
               </li>
               <li className="flex items-start">
                 <span className="mr-2 text-[#4b5563]">4.</span>
-                <span>Copy đoạn mã bắt đầu bằng <code className="font-mono text-[#4e54f3] font-bold">AIza...</code> và dán vào ô bên dưới.</span>
+                <span>Copy đoạn mã khoá (bắt đầu bằng <code className="font-mono text-[#4e54f3] font-bold">AIza...</code> hoặc <code className="font-mono text-[#4e54f3] font-bold">AQ...</code>) và dán vào ô bên dưới.</span>
               </li>
             </ol>
             
@@ -120,8 +131,12 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
           </div>
 
           {/* Action Button - Greyish as in image */}
+          {checkMessage && (
+            <p className="text-[13px] font-bold text-rose-500 -mt-3">{checkMessage}</p>
+          )}
+
           <button
-            disabled={!apiKey.trim()}
+            disabled={!apiKey.trim() || checking}
             onClick={handleSave}
             className={`w-full py-4 rounded-[12px] font-bold text-[16px] flex items-center justify-center space-x-2 transition-all shadow-sm active:scale-[0.98] ${
               apiKey.trim() 
@@ -132,7 +147,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
             </svg>
-            <span>Xác thực & Lưu</span>
+            <span>{checking ? 'Đang kiểm tra khoá...' : 'Xác thực & Lưu'}</span>
           </button>
         </div>
       </div>
