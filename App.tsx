@@ -39,10 +39,10 @@ const App: React.FC = () => {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [isConfigOpen, setIsConfigOpen] = useState(() => {
-    const savedKey = localStorage.getItem('user_api_key');
-    return !savedKey && !process.env.API_KEY;
-  });
+  // Không khoá cứng giao diện khi chưa có khoá (bản cũ làm mờ + chặn toàn bộ app):
+  // trạng thái khoá hiện bằng pill ở cột thiết lập, bấm vào mới mở hộp thoại — theo mẫu các app mới.
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const hasKey = !!localStorage.getItem('user_api_key') || !!process.env.API_KEY;
 
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [config, setConfig] = useState<GenerationConfig>({
@@ -279,6 +279,7 @@ const App: React.FC = () => {
     const byId = new Map(working.map(r => [r.id, r]));
     setProgress({ done: 0, total: targets.length });
     let done = 0;
+    let firstError = '';
 
     const runBatch = async (batch: StudentRecord[]): Promise<void> => {
       batch.forEach(r => { const w = byId.get(r.id); if (w) w.status = 'processing'; });
@@ -296,7 +297,8 @@ const App: React.FC = () => {
             w.status = 'error'; // để trống ô nhận xét — không ghi câu báo lỗi vào ô như bản cũ
           }
         });
-      } catch (e) {
+      } catch (e: any) {
+        if (!firstError) firstError = e?.message || 'Lỗi kết nối AI.';
         batch.forEach(r => { const w = byId.get(r.id); if (w) w.status = 'error'; });
       }
       done += batch.length;
@@ -346,6 +348,7 @@ const App: React.FC = () => {
         setRecords([...working]);
       }
     } finally {
+      if (firstError && working.some(r => r.status === 'error')) setErrorMessage(firstError);
       setIsProcessing(false);
       setProgress(null);
     }
@@ -386,9 +389,46 @@ const App: React.FC = () => {
   };
 
   const switchMode = (mode: AppMode) => {
+    if (mode === config.mode) return;
+    // Đổi chế độ làm mất danh sách đã tải — phải hỏi trước, không xoá lặng lẽ
+    if (records.length > 0 && !window.confirm('Đổi chế độ sẽ xoá danh sách học sinh đã tải. Tiếp tục?')) return;
     setConfig(prev => ({ ...prev, mode, term: mode === 'summary' ? 'Cuối năm học' : prev.term }));
     setRecords([]);
     setErrorMessage(null);
+  };
+
+  const downloadSample = () => {
+    let aoa: any[][];
+    let fileName: string;
+    if (config.mode === 'pcnl') {
+      aoa = [
+        ['Họ và tên', ...PCNL_ITEMS],
+        ['Nguyễn Văn An', 'Tốt', 'Tốt', 'Tốt', 'Đạt', 'Tốt', 'Tốt', 'Đạt', 'Tốt'],
+        ['Trần Thị Bình', 'Đạt', 'Tốt', 'Đạt', 'Đạt', 'Đạt', 'Đạt', 'Đạt', 'Cần cố gắng'],
+      ];
+      fileName = 'FileMau_PhamChatNangLuc.xlsx';
+    } else if (config.mode === 'summary') {
+      const subjects = SUBJECT_MAP[config.grade];
+      const scored = subjects.filter(isScoredSubject);
+      aoa = [
+        ['Họ và tên', ...subjects.map(s => `Mức ${s}`), ...scored.map(s => `Điểm ${s}`), 'Phẩm chất', 'Năng lực'],
+        ['Nguyễn Văn An', ...subjects.map(() => 'T'), ...scored.map(() => 9), 'Tốt', 'Tốt'],
+        ['Trần Thị Bình', ...subjects.map((_, i) => (i === 1 ? 'C' : 'H')), ...scored.map(() => 5), 'Đạt', 'Đạt'],
+      ];
+      fileName = `FileMau_TongHopCuoiNam_Lop${config.grade}.xlsx`;
+    } else {
+      aoa = [
+        ['Họ và tên', 'Mức đạt được', 'Điểm KTĐK', 'Điểm mạnh', 'Cần cố gắng', 'Ghi chú'],
+        ['Nguyễn Văn An', 'Hoàn thành tốt', 9, '', '', ''],
+        ['Trần Thị Bình', 'Hoàn thành', 7, '', '', ''],
+        ['Lê Văn Cường', 'Chưa hoàn thành', 4, '', 'Phép chia', ''],
+      ];
+      fileName = 'FileMau_MonHoc.xlsx';
+    }
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Mau');
+    XLSX.writeFile(workbook, fileName);
   };
 
   const commentTitle = config.mode === 'pcnl' ? 'Nhận xét phẩm chất, năng lực' : config.mode === 'summary' ? 'Nhận xét học bạ' : 'Nội dung nhận xét AI';
@@ -440,7 +480,7 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-[#e6fcf5] text-slate-800 font-sans selection:bg-[#20c997] selection:text-white">
       <Header onOpenConfig={() => setIsConfigOpen(true)} />
 
-      <main className="flex-grow max-w-[1400px] mx-auto px-6 py-10 w-full">
+      <main className={`flex-grow max-w-[1400px] mx-auto px-6 py-10 w-full ${records.length > 0 ? 'pb-28 lg:pb-10' : ''}`}>
         {errorMessage && (
           <div className="mb-8 bg-white border-l-4 border-red-500 p-6 rounded-2xl shadow-sm animate-in fade-in slide-in-from-top-4">
             <p className="text-xs font-black text-red-500 uppercase mb-1 tracking-widest">Lỗi hệ thống</p>
@@ -460,14 +500,24 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-10 transition-all duration-500 ${isConfigOpen && !localStorage.getItem('user_api_key') ? 'blur-sm grayscale opacity-50 pointer-events-none' : ''}`}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
 
           <div className="lg:col-span-4 space-y-6">
             <section className="bg-white p-8 rounded-[24px] shadow-lg shadow-[#20c997]/5 border border-white">
-              <h2 className="text-sm font-extrabold text-[#20c997] uppercase tracking-widest mb-8 flex items-center">
-                <span className="w-2 h-2 rounded-full bg-[#20c997] mr-3"></span>
-                Thiết lập đánh giá
-              </h2>
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-sm font-extrabold text-[#20c997] uppercase tracking-widest flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-[#20c997] mr-3"></span>
+                  Thiết lập đánh giá
+                </h2>
+                <button
+                  onClick={() => setIsConfigOpen(true)}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+                    hasKey ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-200 animate-pulse'
+                  }`}
+                >
+                  {hasKey ? 'Khoá AI: Đã nhập' : 'Chưa nhập khoá AI'}
+                </button>
+              </div>
 
               <div className="space-y-8">
                 {/* Mode */}
@@ -493,7 +543,12 @@ const App: React.FC = () => {
                     {(['1', '2', '3', '4', '5'] as Grade[]).map(g => (
                       <button
                         key={g}
-                        onClick={() => { setConfig(prev => ({ ...prev, grade: g })); if (config.mode === 'summary') setRecords([]); }}
+                        onClick={() => {
+                          if (g === config.grade) return;
+                          if (config.mode === 'summary' && records.length > 0 && !window.confirm('Đổi khối ở chế độ Tổng hợp sẽ xoá danh sách đã tải. Tiếp tục?')) return;
+                          setConfig(prev => ({ ...prev, grade: g }));
+                          if (config.mode === 'summary') setRecords([]);
+                        }}
                         className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold transition-all shadow-sm ${
                           config.grade === g
                           ? `${GRADE_CONFIG[g].activeBg} text-white shadow-lg scale-110 ring-4 ring-offset-2 ${GRADE_CONFIG[g].ring}`
@@ -607,6 +662,12 @@ const App: React.FC = () => {
                     )}
                     <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
                   </div>
+                  <button
+                    onClick={downloadSample}
+                    className="mt-3 w-full py-2.5 rounded-xl text-[11px] font-bold bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997] transition-all"
+                  >
+                    Tải file mẫu
+                  </button>
                 </div>
               </div>
 
@@ -653,13 +714,21 @@ const App: React.FC = () => {
                       {errorCount > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-rose-50 text-rose-600">{errorCount} dòng lỗi</span>}
                     </div>
                   </div>
-                  <button
-                    onClick={exportToExcel}
-                    className="px-6 py-3 bg-[#20c997] text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#19b386] shadow-lg shadow-[#20c997]/20 active:scale-95 flex items-center gap-2 transition-all"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                    Xuất Excel
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { if (window.confirm('Xoá danh sách học sinh đã tải?')) { setRecords([]); setErrorMessage(null); } }}
+                      className="px-4 py-3 bg-white text-slate-400 border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider hover:text-rose-500 hover:border-rose-200 active:scale-95 transition-all"
+                    >
+                      Xoá DS
+                    </button>
+                    <button
+                      onClick={exportToExcel}
+                      className="px-6 py-3 bg-[#20c997] text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#19b386] shadow-lg shadow-[#20c997]/20 active:scale-95 flex items-center gap-2 transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Xuất Excel
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -676,7 +745,6 @@ const App: React.FC = () => {
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors group">
                           <td className="px-8 py-6 align-top">
                             <div className="text-sm font-bold text-slate-700 group-hover:text-[#20c997] transition-colors">{r.name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono mt-1">{r.id.split('-')[1]}</div>
                             {r.issues.length > 0 && (
                               <div className="text-[10px] text-rose-500 font-bold mt-1 max-w-[180px] leading-snug">{r.issues.join('; ')}</div>
                             )}
@@ -702,7 +770,7 @@ const App: React.FC = () => {
                                 />
                                 <button
                                   onClick={() => handleCopy(r.comment || '', r.id)}
-                                  className={`absolute top-2 right-2 p-1.5 rounded-lg transition-all ${copyStatus === r.id ? 'bg-emerald-500 text-white' : 'text-slate-300 hover:text-[#20c997] hover:bg-slate-50 opacity-0 group-hover/edit:opacity-100'}`}
+                                  className={`absolute top-2 right-2 p-1.5 rounded-lg transition-all ${copyStatus === r.id ? 'bg-emerald-500 text-white' : 'text-slate-300 hover:text-[#20c997] hover:bg-slate-50 opacity-100 lg:opacity-0 lg:group-hover/edit:opacity-100'}`}
                                 >
                                   {copyStatus === r.id ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg> : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>}
                                 </button>
@@ -736,6 +804,27 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Thanh nút dính đáy cho điện thoại — khỏi cuộn lên đầu trang khi bảng dài */}
+      {records.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white/90 backdrop-blur-md border-t border-[#20c997]/15 px-4 py-3 flex gap-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <button
+            disabled={pendingTargets.length === 0 || isProcessing}
+            onClick={() => generateFor(pendingTargets)}
+            className={`flex-1 py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-widest active:scale-95 transition-all ${
+              pendingTargets.length === 0 || isProcessing ? 'bg-slate-100 text-slate-300' : 'bg-gradient-to-r from-[#ffc107] to-[#fd7e14] text-white shadow-lg'
+            }`}
+          >
+            {isProcessing ? `Đang xử lý${progress ? ` ${progress.done}/${progress.total}` : ''}...` : pendingTargets.length === 0 ? 'Đã tạo xong' : `Tạo nhận xét (${pendingTargets.length})`}
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="px-5 py-3.5 bg-[#20c997] text-white rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 shadow-lg"
+          >
+            Xuất Excel
+          </button>
+        </div>
+      )}
 
       <ApiKeyModal
         isOpen={isConfigOpen}
