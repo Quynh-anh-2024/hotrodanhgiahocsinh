@@ -47,14 +47,14 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
       
       <div className="relative bg-white w-full max-w-[500px] rounded-[24px] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.2)] animate-in zoom-in-95 duration-200">
         {/* Header - Bright Blue Gradient as in image */}
-        <div className="bg-[#4e54f3] px-8 py-7 text-white relative">
+        <div className="bg-gradient-to-r from-[#0ca678] to-[#087f5b] px-8 py-7 text-white relative">
           <div className="flex items-center space-x-3 mb-1">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
             <h2 className="text-[22px] font-bold tracking-tight">Cấu hình API Key</h2>
           </div>
-          <p className="text-blue-100/90 text-[14px]">Kết nối với Google Gemini để bắt đầu</p>
+          <p className="text-emerald-50/90 text-[14px]">Kết nối với Google Gemini để bắt đầu</p>
           
           {/* Close button - luôn hiện, đóng được cả khi chưa có khoá */}
           <button
@@ -69,18 +69,18 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
 
         <div className="p-8 space-y-7">
           {/* Instructions Box - Light Blue Box matching image */}
-          <div className="bg-[#f0f7ff] border border-[#e1effe] rounded-[16px] p-6">
+          <div className="bg-[#e6fcf5] border border-[#c3fae8] rounded-[16px] p-6">
             <div className="flex items-center space-x-2 mb-4">
-              <svg className="w-5 h-5 text-[#4e54f3]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+              <svg className="w-5 h-5 text-[#087f5b]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6.11a11.957 11.957 0 005.621 12.863A11.955 11.955 0 0012 21.75c2.158 0 4.198-.57 5.961-1.577a11.959 11.959 0 005.621-12.863A11.959 11.959 0 0112 2.714z" />
               </svg>
-              <h3 className="text-[#1e3a8a] font-bold text-[15px]">Hướng dẫn lấy Key miễn phí:</h3>
+              <h3 className="text-[#087f5b] font-bold text-[15px]">Hướng dẫn lấy Key miễn phí:</h3>
             </div>
             
             <ol className="space-y-3 text-[14px] text-[#4b5563] ml-1">
               <li className="flex items-start">
                 <span className="mr-2 text-[#4b5563]">1.</span>
-                <span>Truy cập <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[#4e54f3] font-bold hover:underline inline-flex items-center">Google AI Studio <svg className="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>.</span>
+                <span>Truy cập <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[#087f5b] font-bold hover:underline inline-flex items-center">Google AI Studio <svg className="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>.</span>
               </li>
               <li className="flex items-start">
                 <span className="mr-2 text-[#4b5563]">2.</span>
@@ -92,7 +92,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
               </li>
               <li className="flex items-start">
                 <span className="mr-2 text-[#4b5563]">4.</span>
-                <span>Copy đoạn mã khoá (bắt đầu bằng <code className="font-mono text-[#4e54f3] font-bold">AIza...</code> hoặc <code className="font-mono text-[#4e54f3] font-bold">AQ...</code>) và dán vào ô bên dưới.</span>
+                <span>Copy đoạn mã khoá (bắt đầu bằng <code className="font-mono text-[#087f5b] font-bold">AIza...</code> hoặc <code className="font-mono text-[#087f5b] font-bold">AQ...</code>) và dán vào ô bên dưới.</span>
               </li>
             </ol>
             
@@ -110,11 +110,11 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="AIza... hoặc AQ..."
-                className="w-full bg-white border border-[#d1d5db] rounded-[12px] px-5 py-4 text-[15px] outline-none focus:border-[#4e54f3] transition-all pr-12 text-[#111827]"
+                className="w-full bg-white border border-[#d1d5db] rounded-[12px] px-5 py-4 text-[15px] outline-none focus:border-[#0ca678] transition-all pr-12 text-[#111827]"
               />
               <button 
                 onClick={() => setShowKey(!showKey)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#4e54f3] transition-colors p-1"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#087f5b] transition-colors p-1"
               >
                 {showKey ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>

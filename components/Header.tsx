@@ -36,11 +36,11 @@ const Header: React.FC<HeaderProps> = ({ onOpenConfig }) => {
         <div className="flex justify-between items-center">
           
           <div className="flex flex-col">
-            <h1 className="text-xl font-extrabold text-[#20c997] uppercase tracking-wider flex items-center gap-2">
-              <span className="w-8 h-8 bg-[#20c997] text-white rounded-lg flex items-center justify-center text-lg shadow-lg shadow-[#20c997]/30">AI</span>
+            <h1 className="text-xl font-extrabold text-[#087f5b] uppercase tracking-wider flex items-center gap-2">
+              <span className="w-8 h-8 bg-[#0ca678] text-white rounded-lg flex items-center justify-center text-lg shadow-lg shadow-[#20c997]/30">AI</span>
               Hệ thống nhận xét
             </h1>
-            <p className="text-[11px] text-slate-400 font-bold mt-1 tracking-widest pl-10">
+            <p className="text-xs text-slate-500 font-bold mt-1 tracking-widest pl-10">
               Thông tư 27 & GDPT 2018
             </p>
           </div>
@@ -61,7 +61,7 @@ const Header: React.FC<HeaderProps> = ({ onOpenConfig }) => {
 
             <button 
               onClick={onOpenConfig}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white border-2 border-[#20c997]/20 hover:border-[#20c997] transition-all group shadow-sm text-slate-600 hover:text-[#20c997]"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white border-2 border-[#20c997]/20 hover:border-[#0ca678] transition-all group shadow-sm text-slate-600 hover:text-[#087f5b]"
               title="Cấu hình API Key"
             >
               <svg className="w-5 h-5 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
