@@ -13,7 +13,6 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
   const [showKey, setShowKey] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
-  const isKeySaved = !!localStorage.getItem('user_api_key');
 
   useEffect(() => {
     const savedKey = localStorage.getItem('user_api_key');
@@ -40,12 +39,10 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 overflow-y-auto bg-black/50 backdrop-blur-sm">
-      {/* Background overlay - block dismiss if no key */}
-      <div 
-        className="fixed inset-0" 
-        onClick={() => {
-          if (isKeySaved) onClose();
-        }}
+      {/* Background overlay - bấm ra ngoài để đóng, không khoá cứng người dùng trong hộp thoại */}
+      <div
+        className="fixed inset-0"
+        onClick={onClose}
       ></div>
       
       <div className="relative bg-white w-full max-w-[500px] rounded-[24px] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.2)] animate-in zoom-in-95 duration-200">
@@ -59,17 +56,15 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
           </div>
           <p className="text-blue-100/90 text-[14px]">Kết nối với Google Gemini để bắt đầu</p>
           
-          {/* Close button - only show if key already exists */}
-          {isKeySaved && (
-            <button 
-              onClick={onClose}
-              className="absolute right-6 top-7 text-white/50 hover:text-white transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+          {/* Close button - luôn hiện, đóng được cả khi chưa có khoá */}
+          <button
+            onClick={onClose}
+            className="absolute right-6 top-7 text-white/50 hover:text-white transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="p-8 space-y-7">
@@ -85,7 +80,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
             <ol className="space-y-3 text-[14px] text-[#4b5563] ml-1">
               <li className="flex items-start">
                 <span className="mr-2 text-[#4b5563]">1.</span>
-                <span>Truy cập <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-[#4e54f3] font-bold hover:underline inline-flex items-center">Google AI Studio <svg className="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>.</span>
+                <span>Truy cập <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[#4e54f3] font-bold hover:underline inline-flex items-center">Google AI Studio <svg className="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>.</span>
               </li>
               <li className="flex items-start">
                 <span className="mr-2 text-[#4b5563]">2.</span>
@@ -114,7 +109,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, onSave }) =>
                 type={showKey ? "text" : "password"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="AIzaSy..."
+                placeholder="AIza... hoặc AQ..."
                 className="w-full bg-white border border-[#d1d5db] rounded-[12px] px-5 py-4 text-[15px] outline-none focus:border-[#4e54f3] transition-all pr-12 text-[#111827]"
               />
               <button 
