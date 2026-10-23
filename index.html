@@ -26,6 +26,15 @@
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
+        @media print {
+            header, footer, .no-print { display: none !important; }
+            body { background: #ffffff !important; }
+            main { padding: 0 !important; max-width: 100% !important; }
+            .print-full { grid-column: 1 / -1 !important; }
+            th { position: static !important; }
+            textarea { border: none !important; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
     </style>
 </head>
 <body class="bg-[#e6fcf5] text-slate-800">

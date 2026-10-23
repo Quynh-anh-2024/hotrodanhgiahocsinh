@@ -31,10 +31,33 @@ const MODES: { key: AppMode; label: string }[] = [
 const LEVEL_FROM_CODE: Record<LevelCode, AchievementLevel> = {
   T: AchievementLevel.T, H: AchievementLevel.H, C: AchievementLevel.C
 };
+
+// Tự lưu nháp: danh sách + nhận xét đã tạo/sửa được lưu vào máy, mở lại app là làm tiếp
+const DRAFT_KEY = 'danhgia_draft_v1';
+function loadDraft(): { config: Partial<GenerationConfig>; records: StudentRecord[] } | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.records) || d.records.length === 0) return null;
+    const records = d.records.map((r: StudentRecord) => ({
+      ...r,
+      status: r.status === 'processing' ? 'pending' : r.status,
+      issues: Array.isArray(r.issues) ? r.issues : [],
+    }));
+    return { config: d.config || {}, records };
+  } catch {
+    return null;
+  }
+}
+
+const foldText = (s: string): string =>
+  (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
 const PCNL_RANK: Record<PcnlLevel, number> = { 'Tốt': 3, 'Đạt': 2, 'Cần cố gắng': 1 };
 
 const App: React.FC = () => {
-  const [records, setRecords] = useState<StudentRecord[]>([]);
+  const [draft] = useState(loadDraft);
+  const [records, setRecords] = useState<StudentRecord[]>(() => draft?.records || []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -53,9 +76,36 @@ const App: React.FC = () => {
     evaluationBasis: 'both',
     term: 'Cuối học kỳ 1',
     mode: 'subject',
-    classTopics: ''
+    classTopics: '',
+    ...(draft?.config || {})
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cỡ chữ lớn (lưu lựa chọn vào máy)
+  const [fontLarge, setFontLarge] = useState(() => { try { return localStorage.getItem('ui_font_large') === '1'; } catch { return false; } });
+  useEffect(() => {
+    try { localStorage.setItem('ui_font_large', fontLarge ? '1' : '0'); } catch { /* bỏ qua */ }
+  }, [fontLarge]);
+
+  // Lọc + tìm trong bảng kết quả (chỉ ảnh hưởng hiển thị)
+  const [query, setQuery] = useState('');
+  const [levelFilter, setLevelFilter] = useState<string>('all');
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Tự lưu nháp mỗi khi danh sách/cấu hình đổi (trì hoãn 400ms tránh ghi liên tục khi gõ)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (records.length > 0) {
+          const safe = records.map(r => ({ ...r, status: r.status === 'processing' ? 'pending' as const : r.status }));
+          localStorage.setItem(DRAFT_KEY, JSON.stringify({ config, records: safe }));
+        } else {
+          localStorage.removeItem(DRAFT_KEY);
+        }
+      } catch { /* máy hết dung lượng lưu trữ thì bỏ qua */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [records, config]);
 
   useEffect(() => {
     const availableSubjects = SUBJECT_MAP[config.grade];
@@ -217,9 +267,13 @@ const App: React.FC = () => {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setErrorMessage(null);
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) processFile(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const processFile = (file: File) => {
+    setErrorMessage(null);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -261,7 +315,6 @@ const App: React.FC = () => {
       }
     };
     reader.readAsArrayBuffer(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const serviceForMode = config.mode === 'subject' ? generateComments : config.mode === 'pcnl' ? generatePcnlComments : generateSummaryComments;
@@ -359,6 +412,45 @@ const App: React.FC = () => {
   const invalidCount = records.filter(r => r.status === 'invalid').length;
   const issueCount = records.filter(r => r.issues.length > 0).length;
 
+  // Lọc theo mức + tìm theo tên — chỉ tác động hiển thị, tạo/xuất vẫn trên toàn bộ danh sách
+  type FilterOpt = { key: string; label: string; count: number; match: (r: StudentRecord) => boolean };
+  const filterOptions: FilterOpt[] = (() => {
+    const all: FilterOpt = { key: 'all', label: 'Tất cả', count: records.length, match: () => true };
+    if (config.mode === 'subject') {
+      const by = (c: LevelCode) => records.filter(r => r.levelCode === c);
+      return [
+        all,
+        { key: 'T', label: 'Hoàn thành tốt', count: by('T').length, match: r => r.levelCode === 'T' },
+        { key: 'H', label: 'Hoàn thành', count: by('H').length, match: r => r.levelCode === 'H' },
+        { key: 'C', label: 'Chưa hoàn thành', count: by('C').length, match: r => r.levelCode === 'C' },
+        { key: 'invalid', label: 'Thiếu dữ liệu', count: invalidCount, match: r => r.status === 'invalid' },
+      ];
+    }
+    if (config.mode === 'pcnl') {
+      const has = (v: PcnlLevel) => records.filter(r => Object.values(r.pcnl || {}).includes(v));
+      return [
+        all,
+        { key: 'tot', label: 'Có mức Tốt', count: has('Tốt').length, match: r => Object.values(r.pcnl || {}).includes('Tốt') },
+        { key: 'dat', label: 'Có mức Đạt', count: has('Đạt').length, match: r => Object.values(r.pcnl || {}).includes('Đạt') },
+        { key: 'ccg', label: 'Có Cần cố gắng', count: has('Cần cố gắng').length, match: r => Object.values(r.pcnl || {}).includes('Cần cố gắng') },
+        { key: 'invalid', label: 'Thiếu dữ liệu', count: invalidCount, match: r => r.status === 'invalid' },
+      ];
+    }
+    const byResult = (res: string) => records.filter(r => r.yearEnd?.result === res);
+    return [
+      all,
+      { key: 'xs', label: 'Xuất sắc', count: byResult('Hoàn thành xuất sắc').length, match: r => r.yearEnd?.result === 'Hoàn thành xuất sắc' },
+      { key: 'htt', label: 'Hoàn thành tốt', count: byResult('Hoàn thành tốt').length, match: r => r.yearEnd?.result === 'Hoàn thành tốt' },
+      { key: 'ht', label: 'Hoàn thành', count: byResult('Hoàn thành').length, match: r => r.yearEnd?.result === 'Hoàn thành' },
+      { key: 'cht', label: 'Chưa hoàn thành', count: byResult('Chưa hoàn thành').length, match: r => r.yearEnd?.result === 'Chưa hoàn thành' },
+      { key: 'invalid', label: 'Thiếu dữ liệu', count: invalidCount, match: r => r.status === 'invalid' },
+    ];
+  })();
+  const activeFilter = filterOptions.find(f => f.key === levelFilter) || filterOptions[0];
+  const visibleRecords = records.filter(r =>
+    activeFilter.match(r) && (!query.trim() || foldText(r.name).includes(foldText(query.trim())))
+  );
+
   const exportToExcel = () => {
     const notReady = records.filter(r => r.status !== 'completed' || !r.comment || !r.comment.trim());
     if (notReady.length > 0) {
@@ -438,12 +530,12 @@ const App: React.FC = () => {
       return (
         <div className="flex flex-col items-center gap-1">
           {r.levelCode ? (
-            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
               r.levelCode === 'T' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
               r.levelCode === 'H' ? 'bg-sky-50 text-sky-600 border-sky-100' : 'bg-rose-50 text-rose-600 border-rose-100'
             }`}>{r.levelCode}</span>
           ) : (
-            <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-rose-50 text-rose-600 border-rose-100">Chưa rõ mức</span>
+            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-rose-50 text-rose-600 border-rose-100">Chưa rõ mức</span>
           )}
           {r.score !== null && r.score !== undefined && <span className="text-xs font-bold text-slate-500">{r.score}</span>}
         </div>
@@ -454,7 +546,7 @@ const App: React.FC = () => {
       return (
         <div className="flex flex-wrap gap-1 justify-center max-w-[220px]">
           {entries.map(([k, v]) => (
-            <span key={k} className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${
+            <span key={k} className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border ${
               v === 'Tốt' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
               v === 'Đạt' ? 'bg-sky-50 text-sky-600 border-sky-100' : 'bg-amber-50 text-amber-600 border-amber-100'
             }`}>{k}: {v}</span>
@@ -465,19 +557,19 @@ const App: React.FC = () => {
     const y = r.yearEnd;
     return (
       <div className="flex flex-col items-center gap-1">
-        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+        <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
           y?.result === 'Hoàn thành xuất sắc' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
           y?.result === 'Hoàn thành tốt' ? 'bg-teal-50 text-teal-600 border-teal-100' :
           y?.result === 'Hoàn thành' ? 'bg-sky-50 text-sky-600 border-sky-100' :
           y?.result === 'Chưa hoàn thành' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-500 border-slate-200'
         }`}>{y?.result || '—'}</span>
-        {y?.award && <span className="text-[10px] font-bold text-amber-600 text-center">{y.award}</span>}
+        {y?.award && <span className="text-[11px] font-bold text-amber-600 text-center">{y.award}</span>}
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#e6fcf5] text-slate-800 font-sans selection:bg-[#20c997] selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#e6fcf5] text-slate-800 font-sans selection:bg-[#20c997] selection:text-white" style={{ zoom: fontLarge ? 1.15 : 1 }}>
       <Header onOpenConfig={() => setIsConfigOpen(true)} />
 
       <main className={`flex-grow max-w-[1400px] mx-auto px-6 py-10 w-full ${records.length > 0 ? 'pb-28 lg:pb-10' : ''}`}>
@@ -489,7 +581,7 @@ const App: React.FC = () => {
         )}
 
         {records.length > 0 && issueCount > 0 && (
-          <div className="mb-8 bg-white border-l-4 border-amber-400 p-6 rounded-2xl shadow-sm">
+          <div className="mb-8 bg-white border-l-4 border-amber-400 p-6 rounded-2xl shadow-sm no-print">
             <p className="text-xs font-black text-amber-500 uppercase mb-1 tracking-widest">Dữ kiện cần rà lại: {issueCount} học sinh</p>
             <ul className="text-sm text-slate-600 font-medium space-y-1">
               {records.filter(r => r.issues.length).slice(0, 5).map(r => (
@@ -500,18 +592,18 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
           <div className="lg:col-span-4 space-y-6">
-            <section className="bg-white p-8 rounded-[24px] shadow-lg shadow-[#20c997]/5 border border-white">
+            <section className="bg-white p-8 rounded-[24px] shadow-lg shadow-[#20c997]/5 border border-white lg:sticky lg:top-24 no-print">
               <div className="flex items-center justify-between mb-8">
-                <h2 className="text-sm font-extrabold text-[#20c997] uppercase tracking-widest flex items-center">
+                <h2 className="text-[15px] font-extrabold text-[#087f5b] uppercase tracking-widest flex items-center">
                   <span className="w-2 h-2 rounded-full bg-[#20c997] mr-3"></span>
                   Thiết lập đánh giá
                 </h2>
                 <button
                   onClick={() => setIsConfigOpen(true)}
-                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${
+                  className={`px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${
                     hasKey ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-200 animate-pulse'
                   }`}
                 >
@@ -522,23 +614,38 @@ const App: React.FC = () => {
               <div className="space-y-8">
                 {/* Mode */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Chế độ</label>
+                  <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Chế độ</label>
                   <div className="grid grid-cols-3 gap-2">
                     {MODES.map(m => (
                       <button
                         key={m.key}
                         onClick={() => switchMode(m.key)}
-                        className={`py-3 px-1 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
-                          config.mode === m.key ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
+                        className={`py-3.5 px-1 rounded-xl text-xs font-bold transition-all border border-transparent ${
+                          config.mode === m.key ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
                         }`}
                       >{m.label}</button>
                     ))}
                   </div>
                 </div>
 
+                {/* Cỡ chữ */}
+                <div className="flex items-center justify-between">
+                  <label className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">Cỡ chữ</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setFontLarge(false)}
+                      className={`py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${!fontLarge ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10'}`}
+                    >Thường</button>
+                    <button
+                      onClick={() => setFontLarge(true)}
+                      className={`py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${fontLarge ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10'}`}
+                    >Lớn</button>
+                  </div>
+                </div>
+
                 {/* Grade */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Khối lớp</label>
+                  <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Khối lớp</label>
                   <div className="flex justify-between gap-2">
                     {(['1', '2', '3', '4', '5'] as Grade[]).map(g => (
                       <button
@@ -552,7 +659,7 @@ const App: React.FC = () => {
                         className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold transition-all shadow-sm ${
                           config.grade === g
                           ? `${GRADE_CONFIG[g].activeBg} text-white shadow-lg scale-110 ring-4 ring-offset-2 ${GRADE_CONFIG[g].ring}`
-                          : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                          : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
                         }`}
                       >{g}</button>
                     ))}
@@ -562,14 +669,14 @@ const App: React.FC = () => {
                 {/* Term */}
                 {config.mode !== 'summary' && (
                   <div>
-                    <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Thời điểm</label>
+                    <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Thời điểm</label>
                     <div className="grid grid-cols-2 gap-3">
                       {TERMS.map(t => (
                         <button
                           key={t}
                           onClick={() => setConfig(prev => ({ ...prev, term: t }))}
-                          className={`py-3 px-2 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
-                            config.term === t ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
+                          className={`py-3.5 px-2 rounded-xl text-xs font-bold transition-all border border-transparent ${
+                            config.term === t ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
                           }`}
                         >{t}</button>
                       ))}
@@ -581,7 +688,7 @@ const App: React.FC = () => {
                 {config.mode === 'subject' && (
                   <>
                     <div>
-                      <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Môn học</label>
+                      <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Môn học</label>
                       <div className="relative">
                         <select
                           value={config.subjectContext}
@@ -598,14 +705,14 @@ const App: React.FC = () => {
 
                     {isScoredSubject(config.subjectContext) ? (
                       <div>
-                        <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Căn cứ đánh giá</label>
+                        <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Căn cứ đánh giá</label>
                         <div className="grid grid-cols-3 gap-2">
                           {([['score', 'Điểm số'], ['level', 'Mức đạt'], ['both', 'Cả hai']] as const).map(([key, label]) => (
                             <button
                               key={key}
                               onClick={() => setConfig({ ...config, evaluationBasis: key })}
-                              className={`py-3 px-1 rounded-xl text-[11px] font-bold transition-all border border-transparent ${
-                                config.evaluationBasis === key ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
+                              className={`py-3.5 px-1 rounded-xl text-xs font-bold transition-all border border-transparent ${
+                                config.evaluationBasis === key ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/30' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#20c997]'
                               }`}
                             >{label}</button>
                           ))}
@@ -618,7 +725,7 @@ const App: React.FC = () => {
                     )}
 
                     <div>
-                      <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Nội dung đã học trong kỳ</label>
+                      <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Nội dung đã học trong kỳ</label>
                       <textarea
                         value={config.classTopics}
                         onChange={(e) => setConfig({ ...config, classTopics: e.target.value })}
@@ -629,10 +736,10 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Nêu điểm cần cố gắng</label>
+                      <label className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">Nêu điểm cần cố gắng</label>
                       <button
                         onClick={() => setConfig({ ...config, includeWeakness: !config.includeWeakness })}
-                        className={`py-2 px-4 rounded-xl text-[11px] font-bold transition-all ${config.includeWeakness ? 'bg-[#20c997] text-white shadow-md shadow-[#20c997]/30' : 'bg-slate-50 text-slate-500'}`}
+                        className={`py-2 px-4 rounded-xl text-[11px] font-bold transition-all ${config.includeWeakness ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/30' : 'bg-slate-50 text-slate-500'}`}
                       >{config.includeWeakness ? 'Bật' : 'Tắt'}</button>
                     </div>
                   </>
@@ -640,11 +747,14 @@ const App: React.FC = () => {
 
                 {/* Upload */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-400 uppercase mb-4 block tracking-wider">Dữ liệu nguồn</label>
+                  <label className="text-[13px] font-bold text-slate-500 uppercase mb-4 block tracking-wider">Dữ liệu nguồn</label>
                   <div
                     onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); }}
                     className={`border-2 border-dashed rounded-[24px] p-8 flex flex-col items-center justify-center cursor-pointer transition-all group ${
-                      records.length > 0 ? 'border-[#20c997] bg-[#20c997]/5' : 'border-slate-200 bg-slate-50 hover:border-[#20c997]/50 hover:bg-white'
+                      isDragging ? 'border-[#087f5b] bg-[#087f5b]/10 scale-[1.02]' : records.length > 0 ? 'border-[#20c997] bg-[#20c997]/5' : 'border-slate-200 bg-slate-50 hover:border-[#20c997]/50 hover:bg-white'
                     }`}
                   >
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-3 shadow-sm transition-transform group-hover:scale-110 ${records.length > 0 ? 'bg-[#20c997] text-white' : 'bg-white text-[#20c997]'}`}>
@@ -654,7 +764,7 @@ const App: React.FC = () => {
                       {records.length > 0 ? `Đã tải ${records.length} học sinh` : 'Chạm để tải file Excel'}
                     </p>
                     {records.length === 0 && (
-                      <p className="text-[10px] text-slate-400 mt-2 text-center max-w-[220px] leading-tight">
+                      <p className="text-xs text-slate-500 mt-2 text-center max-w-[220px] leading-tight">
                         {config.mode === 'subject' && '(File dữ liệu đã nhập điểm số hoặc mức đạt được trên CSDL)'}
                         {config.mode === 'pcnl' && '(Cột mang tên từng phẩm chất/năng lực, giá trị Tốt/Đạt/Cần cố gắng)'}
                         {config.mode === 'summary' && '(Cột "Mức <tên môn>", "Điểm <tên môn>", Phẩm chất, Năng lực)'}
@@ -679,12 +789,12 @@ const App: React.FC = () => {
                   className={`w-full py-5 rounded-[20px] font-extrabold text-sm uppercase tracking-widest transition-all transform active:scale-95 shadow-xl ${
                     pendingTargets.length === 0 || isProcessing
                     ? 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'
-                    : 'bg-gradient-to-r from-[#ffc107] to-[#fd7e14] text-white hover:shadow-orange-200 hover:-translate-y-1'
+                    : 'bg-gradient-to-r from-[#ffc107] to-[#fd7e14] text-[#4a2703] hover:shadow-orange-200 hover:-translate-y-1'
                   }`}
                 >
                   {isProcessing ? (
                     <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-5 w-5 text-[#4a2703]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
@@ -695,35 +805,50 @@ const App: React.FC = () => {
                 {invalidCount > 0 && !isProcessing && (
                   <p className="text-[11px] font-bold text-rose-500 text-center">{invalidCount} học sinh thiếu/không đọc được dữ liệu — sửa file Excel rồi tải lại</p>
                 )}
+                {isProcessing && progress && progress.total > 0 && (
+                  <div>
+                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0ca678] rounded-full transition-all duration-500" style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}></div>
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-500 text-center mt-2">Đã xong {progress.done}/{progress.total} ({Math.round((progress.done / progress.total) * 100)}%)</p>
+                  </div>
+                )}
               </div>
             </section>
           </div>
 
           {/* MAIN CONTENT */}
-          <div className="lg:col-span-8">
+          <div className="lg:col-span-8 print-full">
             {records.length > 0 ? (
               <div className="bg-white rounded-[24px] shadow-xl shadow-[#20c997]/5 border border-slate-100 overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
-                <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                <div className="px-8 py-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">
                       {config.mode === 'subject' ? config.subjectContext : config.mode === 'pcnl' ? 'Phẩm chất & Năng lực' : 'Tổng hợp cuối năm'}
                     </h3>
                     <div className="flex gap-2 mt-1">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${GRADE_CONFIG[config.grade].bg} ${GRADE_CONFIG[config.grade].text}`}>Lớp {config.grade}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-slate-100 text-slate-500">{config.mode === 'summary' ? 'Cuối năm học' : config.term}</span>
-                      {errorCount > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-rose-50 text-rose-600">{errorCount} dòng lỗi</span>}
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded uppercase ${GRADE_CONFIG[config.grade].bg} ${GRADE_CONFIG[config.grade].text}`}>Lớp {config.grade}</span>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded uppercase bg-slate-100 text-slate-500">{config.mode === 'summary' ? 'Cuối năm học' : config.term}</span>
+                      {errorCount > 0 && <span className="text-[11px] font-bold px-2 py-0.5 rounded uppercase bg-rose-50 text-rose-600">{errorCount} dòng lỗi</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 no-print">
+                    <span className="hidden md:inline-block text-[11px] font-bold text-slate-400 mr-1">Đã tự lưu nháp</span>
+                    <button
+                      onClick={() => window.print()}
+                      className="px-4 py-3 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider hover:text-[#087f5b] hover:border-[#0ca678] active:scale-95 transition-all"
+                    >
+                      In DS
+                    </button>
                     <button
                       onClick={() => { if (window.confirm('Xoá danh sách học sinh đã tải?')) { setRecords([]); setErrorMessage(null); } }}
-                      className="px-4 py-3 bg-white text-slate-400 border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider hover:text-rose-500 hover:border-rose-200 active:scale-95 transition-all"
+                      className="px-4 py-3 bg-white text-slate-500 border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider hover:text-rose-500 hover:border-rose-200 active:scale-95 transition-all"
                     >
                       Xoá DS
                     </button>
                     <button
                       onClick={exportToExcel}
-                      className="px-6 py-3 bg-[#20c997] text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#19b386] shadow-lg shadow-[#20c997]/20 active:scale-95 flex items-center gap-2 transition-all"
+                      className="px-6 py-3 bg-[#087f5b] text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#0ca678] shadow-lg shadow-[#20c997]/20 active:scale-95 flex items-center gap-2 transition-all"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                       Xuất Excel
@@ -731,25 +856,55 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="px-8 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center gap-3 no-print">
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Tìm theo tên..."
+                    className="md:w-56 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:bg-white focus:border-[#0ca678] focus:ring-2 focus:ring-[#0ca678]/20 transition-all"
+                  />
+                  <div className="flex gap-2 flex-wrap">
+                    {filterOptions.map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setLevelFilter(f.key)}
+                        className={`px-3.5 py-2.5 rounded-full text-xs font-bold transition-all ${
+                          activeFilter.key === f.key ? 'bg-[#087f5b] text-white shadow-md shadow-[#087f5b]/25' : 'bg-slate-50 text-slate-500 hover:bg-[#20c997]/10 hover:text-[#087f5b]'
+                        }`}
+                      >
+                        {f.label} · {f.count}
+                      </button>
+                    ))}
+                  </div>
+                  {(query || activeFilter.key !== 'all') && (
+                    <span className="text-xs font-bold text-slate-500">Đang hiện {visibleRecords.length}/{records.length}</span>
+                  )}
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                        <th className="px-8 py-5 text-left bg-slate-50/50">Học sinh</th>
-                        <th className="px-4 py-5 text-center bg-slate-50/50">Kết quả</th>
-                        <th className="px-8 py-5 text-left bg-slate-50/50">{commentTitle}</th>
+                      <tr className="text-xs font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                        <th className="px-8 py-5 text-left bg-slate-50 sticky top-[74px] z-10">Học sinh</th>
+                        <th className="px-4 py-5 text-center bg-slate-50 sticky top-[74px] z-10">Kết quả</th>
+                        <th className="px-8 py-5 text-left bg-slate-50 sticky top-[74px] z-10">{commentTitle}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {records.map(r => (
+                      {visibleRecords.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-8 py-10 text-center text-sm font-bold text-slate-400">Không có học sinh nào khớp bộ lọc / từ khoá tìm kiếm.</td>
+                        </tr>
+                      )}
+                      {visibleRecords.map(r => (
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors group">
                           <td className="px-8 py-6 align-top">
-                            <div className="text-sm font-bold text-slate-700 group-hover:text-[#20c997] transition-colors">{r.name}</div>
+                            <div className="text-[15px] font-bold text-slate-700 group-hover:text-[#087f5b] transition-colors">{r.name}</div>
                             {r.issues.length > 0 && (
-                              <div className="text-[10px] text-rose-500 font-bold mt-1 max-w-[180px] leading-snug">{r.issues.join('; ')}</div>
+                              <div className="text-[11px] text-rose-500 font-bold mt-1 max-w-[180px] leading-snug">{r.issues.join('; ')}</div>
                             )}
                             {r.status === 'error' && (
-                              <div className="text-[10px] text-rose-500 font-bold mt-1">Tạo chưa thành công — bấm nút tạo để thử lại dòng này</div>
+                              <div className="text-[11px] text-rose-500 font-bold mt-1">Tạo chưa thành công — bấm nút tạo để thử lại dòng này</div>
                             )}
                           </td>
                           <td className="px-4 py-6 text-center align-top">{renderResultCell(r)}</td>
@@ -764,13 +919,14 @@ const App: React.FC = () => {
                                 <textarea
                                   value={r.comment || ""}
                                   onChange={(e) => setRecords(prev => prev.map(p => p.id === r.id ? { ...p, comment: e.target.value, status: 'completed' } : p))}
-                                  className="w-full text-sm text-slate-600 bg-transparent border-2 border-transparent hover:border-slate-100 focus:border-[#20c997] focus:bg-white rounded-xl p-3 transition-all outline-none resize-none leading-relaxed"
+                                  className="w-full text-[15px] text-slate-600 bg-transparent border-2 border-transparent hover:border-slate-100 focus:border-[#20c997] focus:bg-white rounded-xl p-3 transition-all outline-none resize-none leading-[1.65]"
                                   rows={3}
                                   placeholder={r.status === 'invalid' ? 'Thiếu dữ liệu — chưa tạo được' : ''}
                                 />
                                 <button
                                   onClick={() => handleCopy(r.comment || '', r.id)}
-                                  className={`absolute top-2 right-2 p-1.5 rounded-lg transition-all ${copyStatus === r.id ? 'bg-emerald-500 text-white' : 'text-slate-300 hover:text-[#20c997] hover:bg-slate-50 opacity-100 lg:opacity-0 lg:group-hover/edit:opacity-100'}`}
+                                  aria-label="Sao chép nhận xét"
+                                  className={`absolute top-1 right-1 w-11 h-11 flex items-center justify-center rounded-lg transition-all ${copyStatus === r.id ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-[#087f5b] hover:bg-slate-50 opacity-100 lg:opacity-0 lg:group-hover/edit:opacity-100'}`}
                                 >
                                   {copyStatus === r.id ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg> : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"/></svg>}
                                 </button>
@@ -791,7 +947,7 @@ const App: React.FC = () => {
                   </svg>
                 </div>
                 <h3 className="text-2xl font-extrabold text-slate-800 mb-4">Sẵn sàng làm việc</h3>
-                <p className="text-slate-500 max-w-md mx-auto leading-relaxed text-sm font-medium">
+                <p className="text-slate-500 max-w-md mx-auto leading-relaxed text-[15px] font-medium">
                   Vui lòng tải lên tệp Excel và chọn cấu hình ở cột bên trái để bắt đầu tạo nhận xét tự động.
                 </p>
                 <div className="mt-8 flex gap-2">
@@ -807,12 +963,12 @@ const App: React.FC = () => {
 
       {/* Thanh nút dính đáy cho điện thoại — khỏi cuộn lên đầu trang khi bảng dài */}
       {records.length > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white/90 backdrop-blur-md border-t border-[#20c997]/15 px-4 py-3 flex gap-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white/90 backdrop-blur-md border-t border-[#20c997]/15 px-4 py-3 flex gap-3 no-print" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <button
             disabled={pendingTargets.length === 0 || isProcessing}
             onClick={() => generateFor(pendingTargets)}
             className={`flex-1 py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-widest active:scale-95 transition-all ${
-              pendingTargets.length === 0 || isProcessing ? 'bg-slate-100 text-slate-300' : 'bg-gradient-to-r from-[#ffc107] to-[#fd7e14] text-white shadow-lg'
+              pendingTargets.length === 0 || isProcessing ? 'bg-slate-100 text-slate-300' : 'bg-gradient-to-r from-[#ffc107] to-[#fd7e14] text-[#4a2703] shadow-lg'
             }`}
           >
             {isProcessing ? `Đang xử lý${progress ? ` ${progress.done}/${progress.total}` : ''}...` : pendingTargets.length === 0 ? 'Đã tạo xong' : `Tạo nhận xét (${pendingTargets.length})`}
